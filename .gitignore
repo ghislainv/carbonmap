@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+carbonmap.Rproj
+!data
+data/*
+!data/ACD.csv
+!results
+results/*
+!results/Carbon_Map_Final.png
+carbonmap.log
