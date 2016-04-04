@@ -12,4 +12,4 @@ Figure: National 250m forest carbon map for Madagascar for the year 2010.
 
 ## References
 
-Vieilledent, Ghislain, Oliver Gardi, Clovis Grinand, Christian Burren, Mamitiana Andriamanjato, Christian Camara, Charlie J. Gardner, et al. 2016. Bioclimatic Envelope Models Predict a Decrease in Tropical Forest Carbon Stocks with Climate Change in Madagascar. *Journal of Ecology*, n/a–n/a. doi:[10.1111/1365-2745.12548](http://dx.doi.org/10.1111/1365-2745.12548).
+**Vieilledent G., O. Gardi, C. Grinand, C. Burren, M. Andriamanjato, C. Camara, C. J. Gardner, L. Glass, A. Rasolohery, H. Rakoto Ratsimba, V. Gond, J.-R. Rakotoarijaona.** 2016. Bioclimatic envelope models predict a decrease in tropical forest carbon stocks with climate change in Madagascar. *Journal of Ecology*, in press. doi: [10.1111/1365-2745.12548](http://dx.doi.org/10.1111/1365-2745.12548).
