@@ -10,9 +10,6 @@
 ## study. Associated data are available on the Dryad repository:
 ## http://dx.doi.org/10.5061/dryad.9ph68
 ##
-## Load the data in your working directory and create a "./results"
-## directory to save the outputs.
-##
 ##===================================================================
 
 ##=====================
@@ -25,6 +22,8 @@
 library(rgdal)
 library(sp)
 library(raster)
+library(rdryad)
+library(curl)
 
 ##= Functions
 
@@ -56,6 +55,57 @@ AIC.calc <- function(obs,pred) {
   return(AIC)
 }
 
+# Unzip
+decompress_file <- function(directory, file, .file_cache = FALSE) {
+  
+  if (.file_cache == TRUE) {
+    print("decompression skipped")
+  } else {
+    
+    # Set working directory for decompression
+    # simplifies unzip directory location behavior
+    wd <- getwd()
+    setwd(directory)
+    
+    # Run decompression
+    decompression <-
+      system2("unzip",
+              args = c("-o", # include override flag
+                       file),
+              stdout = TRUE)
+    
+    # uncomment to delete archive once decompressed
+    # file.remove(file) 
+    
+    # Reset working directory
+    setwd(wd); rm(wd)
+    
+    # Test for success criteria
+    # change the search depending on 
+    # your implementation
+    if (grepl("Warning message", tail(decompression, 1))) {
+      print(decompression)
+    }
+  }
+}    
+
+##=====================
+##
+## Download data
+##
+##=====================
+
+if (!dir.exists("data")) {
+  dir.create("data")
+}
+f <- dryad_files("10.5061/dryad.9ph68")
+for (i in c(1,6,7,8,9)) {
+  name_f <- strsplit(basename(f[i]),"?",fixed=TRUE)[[1]][1]
+  if (!file.exists(paste0("data/",name_f))) {
+    curl_download(f[i],paste0("data/",name_f))
+  }
+}
+
 ##=====================
 ##
 ## Load ACD data
@@ -63,12 +113,15 @@ AIC.calc <- function(obs,pred) {
 ##=====================
 
 ## Load CSV file
-ACD <- read.csv("ACD.csv",header=TRUE)
+ACD <- read.csv("data/ACD.csv",header=TRUE)
 ACD.plot <- SpatialPointsDataFrame(coords=cbind(ACD$LON,ACD$LAT),
                                    data=ACD,
                                    proj4string=CRS("+init=epsg:4326"))
 ## Plot ACD points
-pdf("./results/ACDplots.pdf")
+if (!dir.exists("results")) {
+  dir.create("results")
+}
+pdf("results/ACDplots.pdf")
 plot(ACD.plot)
 dev.off()
 ## Data-set
@@ -87,19 +140,21 @@ str(df)
 ## Reproject ACD.plot
 ACD.38s <- spTransform(ACD.plot,CRS("+init=epsg:32738"))
 ## Forest raster
-Zvar <- stack("./Zvar.tif")
+Zvar <- stack("data/Zvar.tif")
 names(Zvar) <- c("forest","ecoregion","Saatchi250","Baccini250")
 forest <- Zvar[[1]]
 ## Biome shapefile
-unzip("./ecoregions_shp.zip")
-Biomes.v <- readOGR(dsn="./ecoregions_shp/",layer="madagascar_ecoregion_tenaizy_38s")
+if (!dir.exists("data/ecoregions_shp")) {
+  decompress_file(directory="data", file="ecoregions_shp.zip")
+}
+Biomes.v <- readOGR(dsn="data/ecoregions_shp/",layer="madagascar_ecoregion_tenaizy_38s")
 ## Colors
 red.t <- adjustcolor("red",alpha.f=0.5)
 blue.t <- adjustcolor("blue",alpha.f=0.5)
 green.t <- adjustcolor("dark green",alpha.f=0.5)
 orange.t <- adjustcolor("orange",alpha.f=0.5)
 ## Plot
-pdf("./results/Ecoregion_And_Plots.pdf",width=5,height=9)
+pdf("results/Ecoregion_And_Plots.pdf",width=5,height=9)
 par(mar=c(0,0,0,0))
 plot(Biomes.v,border=grey(0.3),col=c(red.t,blue.t,green.t,orange.t))
 plot(forest,col="black",add=TRUE,legend=FALSE)
@@ -116,7 +171,7 @@ w.notfor10 <- which(is.na(values(forest)))
 ## Biomes raster
 Biomes <-  Zvar[[2]]
 ## Bioclimatic rasters
-Xvar <- stack("./Xvar.tif")
+Xvar <- stack("data/Xvar.tif")
 names(Xvar) <- c("ELEV","EVI","VCF","TEMP","TSEAS","PRECIP")
 bio1 <- Xvar[[4]]
 bio4 <- Xvar[[5]]
@@ -150,17 +205,17 @@ df.spiny <- data.frame(t=bio1.spiny[s.spiny],p=bio12[s.spiny])
 df.plot <- data.frame(t=ACD.plot$TEMP,p=ACD.plot$PRECIP)
 
 ##= Plot
-pdf("./results/ForestZoneBiomes.pdf",width=10,height=10)
+pdf("results/ForestZoneBiomes.pdf",width=10,height=10)
 ggplot(df.moist, aes(x=p, y=t)) +
-    geom_point(data=df.plot,col=grey(0.5)) + xlim(250,3100) + ylim(130,280) +
-    geom_density2d(col="dark green") +
-    geom_density2d(data=df.dry,col="orange") +
-    geom_density2d(data=df.spiny,col="red") +
-    labs(x="\nAnnual precipitation (mm.y-1)",y="Mean annual temperature (°C x 10)\n",size=2) +
-    theme(axis.title.x = element_text(size = rel(1.8))) +
-    theme(axis.title.y = element_text(size = rel(1.8))) +
-    theme(axis.text.x = element_text(size = rel(1.8))) +
-    theme(axis.text.y = element_text(size = rel(1.8)))
+  geom_point(data=df.plot,col=grey(0.5)) + xlim(250,3100) + ylim(130,280) +
+  geom_density2d(col="dark green") +
+  geom_density2d(data=df.dry,col="orange") +
+  geom_density2d(data=df.spiny,col="red") +
+  labs(x="\nAnnual precipitation (mm.y-1)",y="Mean annual temperature (°C x 10)\n",size=2) +
+  theme(axis.title.x = element_text(size = rel(1.8))) +
+  theme(axis.title.y = element_text(size = rel(1.8))) +
+  theme(axis.text.x = element_text(size = rel(1.8))) +
+  theme(axis.text.y = element_text(size = rel(1.8)))
 dev.off()
 
 ##=========================================================================
@@ -172,7 +227,7 @@ dev.off()
 library(ggplot2)
 library(gam)
 
-pdf("./results/descriptive_plots.pdf")
+pdf("results/descriptive_plots.pdf")
 qplot(TEMP,ACDobs,data=df,geom=c("point","smooth"),method="lm",formula=y~ns(x,3))
 qplot(TSEAS,ACDobs,data=df,geom=c("point","smooth"),method="lm",formula=y~ns(x,3))
 qplot(PRECIP,ACDobs,data=df,geom=c("point","smooth"),method="lm",formula=y~ns(x,3))
@@ -196,15 +251,15 @@ set.seed(1408) ## To make computation reproducible (1408 = my birthday :))
 mod.RF <- randomForest(f,data=df,importance=TRUE)
 
 ## Save the randomForest model
-save(mod.RF,file="./results/RFmodel.rda",compress=TRUE)
+save(mod.RF,file="results/RFmodel.rda",compress=TRUE)
 
 ## Variable importance
-sink(file="./results/VarImportance.txt")
+sink(file="results/VarImportance.txt")
 importance(mod.RF,type=1)
 sink()
 
 ## Variable effect 
-pdf(file="./results/VarEffect.pdf",width=15,height=15)
+pdf(file="results/VarEffect.pdf",width=15,height=15)
 par(mfrow=c(3,2),cex=1.4,cex.lab=1.2,font.lab=2)
 par(mar=c(5,5,2,3))
 partialPlot(mod.RF,df,x.var="ELEV",xlab="Elevation (E, in m)",ylab="ACD (Mg.ha-1)",main="",lwd=3)
@@ -233,34 +288,34 @@ dev.off()
 ##=====================================
 
 ##= Import raster stack of predictive variables
-Xvar <- stack("./Xvar.tif")
+Xvar <- stack("data/Xvar.tif")
 names(Xvar) <- c("ELEV","EVI","VCF","TEMP","TSEAS","PRECIP")
 values(Xvar[[2]]) <- values(Xvar[[2]])/10000 # rescale EVI to be between 0 and 1
 ## Plot of predictive variables
-pdf(file="./results/Xvar.pdf")
+pdf(file="results/Xvar.pdf")
 plot(Xvar)
 dev.off()
 
 ##= Predictions (caution: takes some time to run, ~5min)
 ACD.pred <- predict(Xvar,model=mod.RF,
                     na.rm=TRUE,
-                    filename="./results/ACD_RF_2010.tif",
+                    filename="results/ACD_RF_2010.tif",
                     datatype="INT2S",
                     options=c("COMPRESS=LWZ", "PREDICTOR=2"),
                     format="GTiff",overwrite=TRUE,progress="text")
-## ACD.pred <- raster("./results/ACD_RF_2010.tif")
+## ACD.pred <- raster("results/ACD_RF_2010.tif")
 
 ##= Mask with forest in 2010
-Zvar <- stack("Zvar.tif")
+Zvar <- stack("data/Zvar.tif")
 names(Zvar) <- c("forest","ecoregion","Saatchi250","Baccini250")
 forest <- Zvar[[1]]
 
 ##= Map of *forest* carbon stock in Madagascar (TIF format)
-ACD.pred <- raster("./results/ACD_RF_2010.tif")
+ACD.pred <- raster("results/ACD_RF_2010.tif")
 ACD.for10 <- ACD.pred
 w.notfor10 <- which(is.na(values(forest)))
 values(ACD.for10)[w.notfor10] <- NA
-writeRaster(ACD.for10,"./results/ACD_for10.tif",datatype="INT2S",format="GTiff",
+writeRaster(ACD.for10,"results/ACD_for10.tif",datatype="INT2S",format="GTiff",
             options=c("COMPRESS=LWZ", "PREDICTOR=2"),
             overwrite=TRUE)
 
@@ -273,7 +328,7 @@ ter.col <- c(rev(terrain.colors(255))[-c(1:10)])
 ColorRamp <- colorRampPalette(c(ter.col[length(ter.col)],"black"))
 Colors <- c(rev(terrain.colors(255))[-c(1:10)],ColorRamp(50))
 ## Plot
-pdf("./results/Carbon_Map_Final.pdf",width=6.5,height=10)
+pdf("results/Carbon_Map_Final.pdf",width=6.5,height=10)
 par(mar=c(0,0,0,0),cex=1.4)
 plot(ACD.for10,col=Colors,
      ##maxpixels=50000,
@@ -294,12 +349,12 @@ Res <- "1000"
 nodat <- "-9999"
 
 ## Resample with gdalwarp (GDAL must be installed on the computer)
-Input <- "./results/ACD_RF_2010.tif"
-Output <- "./results/ACD_RF_2010_resamp_1km.tif"
+Input <- "results/ACD_RF_2010.tif"
+Output <- "results/ACD_RF_2010_resamp_1km.tif"
 system(paste0("gdalwarp -ot Int16 -dstnodata ",nodat," -te ",Extent," -tr ",Res," ",Res," -r bilinear -overwrite ",Input," ",Output))
 
 ## Import resample raster
-ACD.resamp <- raster("./results/ACD_RF_2010_resamp_1km.tif")
+ACD.resamp <- raster("results/ACD_RF_2010_resamp_1km.tif")
 
 ## Extract predictions
 df$ACDpredRF <- mod.RF$predicted ## randomForests predictions
@@ -379,12 +434,12 @@ Perf$AIC <- c(AIC.RF,AIC.ACD.map,AIC.ACD.resamp,AIC.Bac,AIC.Saa)
 Perf$n <- c(n.RF,n.ACD.map,n.ACD.resamp,n.Bac,n.Saa)
 
 ## Backup
-sink(file="./results/Performance_Index_Internal.txt")
+sink(file="results/Performance_Index_Internal.txt")
 print(Perf)
 sink()
 
 ##= Plot
-pdf(file="./results/Predicted_observed.pdf",width=10,height=10)
+pdf(file="results/Predicted_observed.pdf",width=10,height=10)
 par(mfrow=c(2,2),cex.axis=1.4,cex.lab=1.5,cex.main=1.5)
 obs <- df$ACDobs[s.obs]
 ## Mada 250m
@@ -453,7 +508,7 @@ b.Saa <- lowess(df$ACDobs[s.obs],bias.Saa)
 min.Bias <- min(b.ACD.resamp$y,b.Bac$y,b.Saa$y)
 max.Bias <- max(b.ACD.resamp$y,b.Bac$y,b.Saa$y)
 
-pdf(file="./results/bias.pdf")
+pdf(file="results/bias.pdf")
 par(mar=c(4,4,1,1),cex=1.4)
 plot(b.ACD.resamp$x,b.ACD.resamp$y,
      bty="n",
@@ -501,17 +556,17 @@ for (i in 1:ncross) {
   n.test <- length(test.obs)
   df.train <- df[train.obs,]
   df.test <- df[test.obs,] 
- 
+  
   ##= Random Forests
   mod.RF <- randomForest(f,data=df.train)
   df.test$ACDpredRF <- predict(mod.RF,df.test)
-
+  
   ##= Obs Baccini
   s.obs <- 1:nrow(df.test)
   s.obs.Bac <- which(!is.na(df.test$BacciniOrig500m))
-
+  
   ##= Performance indexes
-
+  
   ## Random Forests
   obs <- df.test$ACDobs[s.obs]
   pred <- df.test$ACDpredRF[s.obs]
@@ -520,7 +575,7 @@ for (i in 1:ncross) {
   bias.RF <- bias.calc(obs,pred)
   Bias.RF[i] <- mean(bias.RF)
   AIC.RF[i] <- AIC.calc(obs,pred)
-
+  
   ## Baccini
   obs <- df.test$ACDobs[s.obs.Bac]
   pred <- df.test$BacciniOrig500m[s.obs.Bac]
@@ -529,7 +584,7 @@ for (i in 1:ncross) {
   bias.Bac <- bias.calc(obs,pred)
   Bias.Bac[i] <- mean(bias.Bac)
   AIC.Bac[i] <- AIC.calc(obs,pred)
-
+  
   ## Saatchi
   obs <- df.test$ACDobs[s.obs]
   pred <- df.test$SaatchiOrig1km[s.obs]
@@ -538,7 +593,7 @@ for (i in 1:ncross) {
   bias.Saa <- bias.calc(obs,pred)
   Bias.Saa[i] <- mean(bias.Saa)
   AIC.Saa[i] <- AIC.calc(obs,pred)
-
+  
 } ## End of bootstrap
 
 ## Table of results
@@ -551,10 +606,10 @@ Perf.mean$Bias <- apply(cbind(Bias.RF,Bias.Bac,Bias.Saa),2,mean)
 Perf.mean$AIC <- apply(cbind(AIC.RF,AIC.Bac,AIC.Saa),2,mean)
 
 ## Backup
-sink(file="./results/Performance_Index_CV_mean.txt")
+sink(file="results/Performance_Index_CV_mean.txt")
 print(Perf.mean)
 sink()
-  
+
 ## Table of results
 Perf.sd <- data.frame(matrix(NA,nrow=3,ncol=5))
 names(Perf.sd) <- c("Model","R2","RMSE","Bias","AIC")
@@ -565,7 +620,7 @@ Perf.sd$Bias <- apply(cbind(Bias.RF,Bias.Bac,Bias.Saa),2,sd)
 Perf.sd$AIC <- apply(cbind(AIC.RF,AIC.Bac,AIC.Saa),2,sd)
 
 ## Backup
-sink(file="./results/Performance_Index_CV_sd.txt")
+sink(file="results/Performance_Index_CV_sd.txt")
 print(Perf.sd)
 sink()
 
@@ -683,11 +738,11 @@ TotACD <- data.frame(Source=c("ACD.map","Saatchi1km","Baccini500m"),TotACD=c(Tot
 
 ##===============
 ## Export results
-sink("./results/mean_ACD_forest.txt")
+sink("results/mean_ACD_forest.txt")
 print(df.ACD.biome)
 sink()
 
-sink("./results/Tot_ACD_forest.txt")
+sink("results/Tot_ACD_forest.txt")
 print(TotACD)
 sink()
 
@@ -699,14 +754,16 @@ sink()
 
 ##= Unzip climatic projection data (takes some time to run: ~2min)
 ##= Climatic projections are unzipped in the ./climproj folder in the working directory
-unzip(zipfile="climproj.zip")
+if (!dir.exists("data/climproj")) {
+  decompress_file(directory="data",file="climproj.zip")
+}
 
 ##= Loop indices
 yr <- c("2050","2080") ## For 2050, 2080
 mod <- c("ac","gs","ip","mc","he","cc","no") ## For global climate models (GCMs): CNRM-CM5, GISS-E2-R, HadGEM2-ES 
 rcp <- c("45","85") ## For representative concentration pathways (RCPs): RCP 4.5, RCP 8.5
 biovar <- c("bio1","bio4","bio12") ## BIO1=Annual Mean Temperature, BIO4=Temperature Seasonality (standard deviation *100)
-                                   ## BIO12=Annual Precipitation
+## BIO12=Annual Precipitation
 
 ##= Total number of models
 n.mod <- length(mod)*length(rcp)*length(yr)
@@ -721,30 +778,30 @@ df.acd <- data.frame(MOD=rep(mod,each=4),RCP=rep(c("45","45","85","85"),7),YR=re
 
 ##= Loop (takes a long time to run: 28 runs in total, ~5min by run)
 for (i in 1:length(mod)) {
-    for (j in 1:length(rcp)) {
-        for (l in 1:length(yr)) {
-            ##= Message
-            i.mod <- (i-1)*length(rcp)*length(yr) + (j-1)*length(yr) + l
-            cat(paste0("\n","Model ",i.mod,"/",n.mod,": ",yr[l],mod[i],rcp[j],"\n"))
-            ##= Explicative bioclimatic variables
-            bio1.region <- raster(paste0("./climproj/bio1_",mod[i],"_",rcp[j],"_",yr[l],"_region.tif"))
-            bio4.region <- raster(paste0("./climproj/bio4_",mod[i],"_",rcp[j],"_",yr[l],"_region.tif"))
-            bio12.region <- raster(paste0("./climproj/bio12_",mod[i],"_",rcp[j],"_",yr[l],"_region.tif"))
-            Xvar.proj <- stack(list(ELEV=Xvar[[1]],EVI=Xvar[[2]],VCF=Xvar[[3]],
-                                       TEMP=bio1.region,TSEAS=bio4.region,PRECIP=bio12.region))
-            ##= Predict with randomForest model
-            ACD.proj <- predict(Xvar.proj, model=mod.RF,
-                                na.rm=TRUE,
-                                filename=paste0("./results/ACD_",mod[i],"_",rcp[j],"_",yr[l],".tif"),
-                                datatype="INT2S",
-                                options=c("COMPRESS=LWZ", "PREDICTOR=2"),
-                                format="GTiff",overwrite=TRUE,progress="text")
-            ##= National forest ACD
-            ACD.proj.for10 <- ACD.proj
-            values(ACD.proj.for10)[w.notfor10] <- NA
-            df.acd$ACD[i.mod] <- round(cellStats(ACD.proj.for10,stat="sum",na.rm=TRUE)*coef.surf)         
-        }
+  for (j in 1:length(rcp)) {
+    for (l in 1:length(yr)) {
+      ##= Message
+      i.mod <- (i-1)*length(rcp)*length(yr) + (j-1)*length(yr) + l
+      cat(paste0("\n","Model ",i.mod,"/",n.mod,": ",yr[l],mod[i],rcp[j],"\n"))
+      ##= Explicative bioclimatic variables
+      bio1.region <- raster(paste0("data/climproj/bio1_",mod[i],"_",rcp[j],"_",yr[l],"_region.tif"))
+      bio4.region <- raster(paste0("data/climproj/bio4_",mod[i],"_",rcp[j],"_",yr[l],"_region.tif"))
+      bio12.region <- raster(paste0("data/climproj/bio12_",mod[i],"_",rcp[j],"_",yr[l],"_region.tif"))
+      Xvar.proj <- stack(list(ELEV=Xvar[[1]],EVI=Xvar[[2]],VCF=Xvar[[3]],
+                              TEMP=bio1.region,TSEAS=bio4.region,PRECIP=bio12.region))
+      ##= Predict with randomForest model
+      ACD.proj <- predict(Xvar.proj, model=mod.RF,
+                          na.rm=TRUE,
+                          filename=paste0("results/ACD_",mod[i],"_",rcp[j],"_",yr[l],".tif"),
+                          datatype="INT2S",
+                          options=c("COMPRESS=LWZ", "PREDICTOR=2"),
+                          format="GTiff",overwrite=TRUE,progress="text")
+      ##= National forest ACD
+      ACD.proj.for10 <- ACD.proj
+      values(ACD.proj.for10)[w.notfor10] <- NA
+      df.acd$ACD[i.mod] <- round(cellStats(ACD.proj.for10,stat="sum",na.rm=TRUE)*coef.surf)         
     }
+  }
 }
 
 ##== Loss
@@ -754,7 +811,7 @@ df.acd$loss.perc <- -round(100*(TotACD.10-df.acd$ACD)/TotACD.10,2)
 df.acd$ACD.2010 <- TotACD.10
 
 ##== Backup df.acd
-sink(file="./results/df.acd.txt")
+sink(file="results/df.acd.txt")
 df.acd
 sink()
 
@@ -764,7 +821,7 @@ Mean <- apply(df.acd[df.acd$RCP==85 & df.acd$YR==2050,4:6],2,mean)
 Max <- apply(df.acd[df.acd$RCP==85 & df.acd$YR==2050,4:6],2,min) ## Inverse min -> Maximal loss
 Min <- apply(df.acd[df.acd$RCP==85 & df.acd$YR==2050,4:6],2,max) ## Inverse max -> Minimal loss
 df.acd50.rcp85 <- rbind(Mean,Max,Min) 
-sink(file="./results/df.acd50.rcp85.txt")
+sink(file="results/df.acd50.rcp85.txt")
 df.acd50.rcp85
 sink()
 ## 2080
@@ -772,28 +829,28 @@ Mean <- apply(df.acd[df.acd$RCP==85 & df.acd$YR==2080,4:6],2,mean)
 Max <- apply(df.acd[df.acd$RCP==85 & df.acd$YR==2080,4:6],2,min) ## Inverse min -> Maximal loss
 Min <- apply(df.acd[df.acd$RCP==85 & df.acd$YR==2080,4:6],2,max) ## Inverse max -> Minimal loss
 df.acd80.rcp85 <- rbind(Mean,Max,Min) 
-sink(file="./results/df.acd80.rcp85.txt")
+sink(file="results/df.acd80.rcp85.txt")
 df.acd80.rcp85
 sink()
 
 ##== ACD raster in 2050 and 2080 for RCP 8 from model averaging
 ## 2050
-ACD.50ac85 <- raster("./results/ACD_ac_85_2050.tif")
-ACD.50cc85 <- raster("./results/ACD_cc_85_2050.tif")
-ACD.50gs85 <- raster("./results/ACD_gs_85_2050.tif")
-ACD.50he85 <- raster("./results/ACD_he_85_2050.tif")
-ACD.50ip85 <- raster("./results/ACD_ip_85_2050.tif")
-ACD.50mc85 <- raster("./results/ACD_mc_85_2050.tif")
-ACD.50no85 <- raster("./results/ACD_no_85_2050.tif")
+ACD.50ac85 <- raster("results/ACD_ac_85_2050.tif")
+ACD.50cc85 <- raster("results/ACD_cc_85_2050.tif")
+ACD.50gs85 <- raster("results/ACD_gs_85_2050.tif")
+ACD.50he85 <- raster("results/ACD_he_85_2050.tif")
+ACD.50ip85 <- raster("results/ACD_ip_85_2050.tif")
+ACD.50mc85 <- raster("results/ACD_mc_85_2050.tif")
+ACD.50no85 <- raster("results/ACD_no_85_2050.tif")
 Stack.2050.85 <- stack(ACD.50ac85,ACD.50cc85,ACD.50gs85,ACD.50he85,ACD.50ip85,ACD.50mc85,ACD.50no85)
 ## 2080
-ACD.80ac85 <- raster("./results/ACD_ac_85_2080.tif")
-ACD.80cc85 <- raster("./results/ACD_cc_85_2080.tif")
-ACD.80gs85 <- raster("./results/ACD_gs_85_2080.tif")
-ACD.80he85 <- raster("./results/ACD_he_85_2080.tif")
-ACD.80ip85 <- raster("./results/ACD_ip_85_2080.tif")
-ACD.80mc85 <- raster("./results/ACD_mc_85_2080.tif")
-ACD.80no85 <- raster("./results/ACD_no_85_2080.tif")
+ACD.80ac85 <- raster("results/ACD_ac_85_2080.tif")
+ACD.80cc85 <- raster("results/ACD_cc_85_2080.tif")
+ACD.80gs85 <- raster("results/ACD_gs_85_2080.tif")
+ACD.80he85 <- raster("results/ACD_he_85_2080.tif")
+ACD.80ip85 <- raster("results/ACD_ip_85_2080.tif")
+ACD.80mc85 <- raster("results/ACD_mc_85_2080.tif")
+ACD.80no85 <- raster("results/ACD_no_85_2080.tif")
 Stack.2080.85 <- stack(ACD.80ac85,ACD.80cc85,ACD.80gs85,ACD.80he85,ACD.80ip85,ACD.80mc85,ACD.80no85)
 
 ##= Mean
@@ -807,10 +864,10 @@ values(ACD.2050.85.for10)[w.notfor10] <- NA
 ACD.2080.85.for10 <- ACD.2080.85.mean
 values(ACD.2080.85.for10)[w.notfor10] <- NA
 ## Write o disk
-writeRaster(ACD.2050.85.for10,"./results/ACD.2050.85.for10.tif",datatype="INT2S",
+writeRaster(ACD.2050.85.for10,"results/ACD.2050.85.for10.tif",datatype="INT2S",
             options=c("COMPRESS=LWZ", "PREDICTOR=2"),
             format="GTiff",overwrite=TRUE)
-writeRaster(ACD.2080.85.for10,"./results/ACD.2080.85.for10.tif",datatype="INT2S",
+writeRaster(ACD.2080.85.for10,"results/ACD.2080.85.for10.tif",datatype="INT2S",
             options=c("COMPRESS=LWZ", "PREDICTOR=2"),
             format="GTiff",overwrite=TRUE)
 
@@ -823,15 +880,15 @@ writeRaster(ACD.2080.85.for10,"./results/ACD.2080.85.for10.tif",datatype="INT2S"
 ##==================
 ##= Load ACD rasters
 
-ACD.for10 <- raster("./results/ACD_for10.tif")
-ACD.2050.85.for10 <- raster("./results/ACD.2050.85.for10.tif")
-ACD.2080.85.for10 <- raster("./results/ACD.2080.85.for10.tif")
+ACD.for10 <- raster("results/ACD_for10.tif")
+ACD.2050.85.for10 <- raster("results/ACD.2050.85.for10.tif")
+ACD.2080.85.for10 <- raster("results/ACD.2080.85.for10.tif")
 
 ##========================
 ##= Plots of carbon stocks
 
-##pdf("./results/Evolution_ACD_Climate.pdf",width=10,height=7)
-png("./results/Evolution_ACD_Climate.png",width=300*10,height=300*7,res=300)
+##pdf("results/Evolution_ACD_Climate.pdf",width=10,height=7)
+png("results/Evolution_ACD_Climate.png",width=300*10,height=300*7,res=300)
 par(mfrow=c(1,3))
 ## 2010
 par(cex=1.2,mar=c(0,0,4,0))
@@ -864,7 +921,7 @@ dev.off()
 
 ## Legend
 l.arg <- list(text="Carbon stock (Mg.ha-1)",side=2, line=0.5, cex=1.4)
-png("./results/Evolution_ACD_Climate_legend.png",height=300*10,width=300*2,res=300)
+png("results/Evolution_ACD_Climate_legend.png",height=300*10,width=300*2,res=300)
 par(mar=c(0,0,0,0))
 plot(ACD.for10,col=Colors,
      maxpixels=50000,
@@ -880,7 +937,7 @@ ACD.2010.2050 <- ACD.2050.85.for10-ACD.for10
 ACD.2010.2080 <- ACD.2080.85.for10-ACD.for10
 
 ##= Histograms
-png("./results/Hist_carbon_stock_change.png",height=300*10,width=300*5,res=300)
+png("results/Hist_carbon_stock_change.png",height=300*10,width=300*5,res=300)
 par(mfrow=c(2,1),cex=1.2)
 ## 2050
 par(mar=c(3,4,2,1))
@@ -906,7 +963,7 @@ ColorRamp <- colorRampPalette(c("black","#d73027","#ffffbf","#1a9850","black"))
 Colors <- ColorRamp(301)
 
 ## Plots
-png("./results/Carbon_stock_change.png",width=300*7,height=300*7,res=300)
+png("results/Carbon_stock_change.png",width=300*7,height=300*7,res=300)
 par(mfrow=c(1,2))
 ## 2050
 par(cex=1.2,mar=c(0,0,0,0))
@@ -928,7 +985,7 @@ dev.off()
 
 ## Legend
 l.arg <- list(text="Carbon stock change (Mg.ha-1)",side=2, line=0.5, cex=1.4)
-png("./results/Carbon_stock_change_legend.png",height=300*10,width=300*2,res=300)
+png("results/Carbon_stock_change_legend.png",height=300*10,width=300*2,res=300)
 par(mar=c(0,0,0,0))
 plot(ACD.2010.2080,col=Colors[1:201],
      maxpixels=50000,
@@ -946,13 +1003,13 @@ dev.off()
 ## Actual
 bio4.region <- Xvar[[5]]
 ## Mean in 2080
-bio4.ac.2080 <- raster("./climproj/bio4_ac_85_2080_region.tif")
-bio4.cc.2080 <- raster("./climproj/bio4_cc_85_2080_region.tif")
-bio4.gs.2080 <- raster("./climproj/bio4_gs_85_2080_region.tif")
-bio4.he.2080 <- raster("./climproj/bio4_he_85_2080_region.tif")
-bio4.ip.2080 <- raster("./climproj/bio4_ip_85_2080_region.tif")
-bio4.mc.2080 <- raster("./climproj/bio4_mc_85_2080_region.tif")
-bio4.no.2080 <- raster("./climproj/bio4_no_85_2080_region.tif")
+bio4.ac.2080 <- raster("data/climproj/bio4_ac_85_2080_region.tif")
+bio4.cc.2080 <- raster("data/climproj/bio4_cc_85_2080_region.tif")
+bio4.gs.2080 <- raster("data/climproj/bio4_gs_85_2080_region.tif")
+bio4.he.2080 <- raster("data/climproj/bio4_he_85_2080_region.tif")
+bio4.ip.2080 <- raster("data/climproj/bio4_ip_85_2080_region.tif")
+bio4.mc.2080 <- raster("data/climproj/bio4_mc_85_2080_region.tif")
+bio4.no.2080 <- raster("data/climproj/bio4_no_85_2080_region.tif")
 Stack.bio4.2080 <- stack(c(bio4.ac.2080,bio4.cc.2080,bio4.gs.2080,bio4.he.2080,
                            bio4.ip.2080,bio4.mc.2080,bio4.no.2080))
 bio4.2080 <- mean(Stack.bio4.2080)
@@ -967,8 +1024,8 @@ l.arg <- list(text="Temp. seas. anomalies (sd x 100)",side=3, line=0.5, cex=1.4)
 ## Colors
 Colors <- cm.colors(255)
 ## Plot
-##pdf("./results/TS_anomalies.pdf",width=6.5,height=10)
-png("./results/TS_anomalies.png",width=100*6,height=100*10,res=100)
+##pdf("results/TS_anomalies.pdf",width=6.5,height=10)
+png("results/TS_anomalies.png",width=100*6,height=100*10,res=100)
 par(cex=1.2,mar=c(2,0,0,0))
 plot(bio4.anomalies,col=Colors,
      ##maxpixels=50000,
@@ -983,15 +1040,15 @@ summary(bio4.anomalies) ## +138 sd x 100
 ## Actual
 bio12.region <- Xvar[[6]]
 ## Mean in 2080
-bio12.ac.2080 <- raster("./climproj/bio12_ac_85_2080_region.tif")
-bio12.cc.2080 <- raster("./climproj/bio12_cc_85_2080_region.tif")
-bio12.gs.2080 <- raster("./climproj/bio12_gs_85_2080_region.tif")
-bio12.he.2080 <- raster("./climproj/bio12_he_85_2080_region.tif")
-bio12.ip.2080 <- raster("./climproj/bio12_ip_85_2080_region.tif")
-bio12.mc.2080 <- raster("./climproj/bio12_mc_85_2080_region.tif")
-bio12.no.2080 <- raster("./climproj/bio12_no_85_2080_region.tif")
+bio12.ac.2080 <- raster("data/climproj/bio12_ac_85_2080_region.tif")
+bio12.cc.2080 <- raster("data/climproj/bio12_cc_85_2080_region.tif")
+bio12.gs.2080 <- raster("data/climproj/bio12_gs_85_2080_region.tif")
+bio12.he.2080 <- raster("data/climproj/bio12_he_85_2080_region.tif")
+bio12.ip.2080 <- raster("data/climproj/bio12_ip_85_2080_region.tif")
+bio12.mc.2080 <- raster("data/climproj/bio12_mc_85_2080_region.tif")
+bio12.no.2080 <- raster("data/climproj/bio12_no_85_2080_region.tif")
 Stack.bio12.2080 <- stack(c(bio12.ac.2080,bio12.cc.2080,bio12.gs.2080,bio12.he.2080,
-                           bio12.ip.2080,bio12.mc.2080,bio12.no.2080))
+                            bio12.ip.2080,bio12.mc.2080,bio12.no.2080))
 bio12.2080 <- mean(Stack.bio12.2080)
 ## Anomalies
 bio12.anomalies <- bio12.region
@@ -1004,8 +1061,8 @@ l.arg <- list(text="Precip. anomalies (mm.y-1)",side=3, line=0.5, cex=1.4)
 ## Colors
 Colors <- cm.colors(255)
 ## Plot
-##pdf("./results/P_anomalies.pdf",width=6.5,height=10)
-png("./results/P_anomalies.png",width=100*6,height=100*10,res=100)
+##pdf("results/P_anomalies.pdf",width=6.5,height=10)
+png("results/P_anomalies.png",width=100*6,height=100*10,res=100)
 par(cex=1.2,mar=c(2,0,0,0))
 plot(bio12.anomalies,col=Colors,
      ##maxpixels=50000,
@@ -1020,13 +1077,13 @@ summary(bio12.anomalies) ## -107 mm.y-1
 ## Actual
 bio1.region <- Xvar[[4]]
 ## Mean in 2080
-bio1.ac.2080 <- raster("./climproj/bio1_ac_85_2080_region.tif")
-bio1.cc.2080 <- raster("./climproj/bio1_cc_85_2080_region.tif")
-bio1.gs.2080 <- raster("./climproj/bio1_gs_85_2080_region.tif")
-bio1.he.2080 <- raster("./climproj/bio1_he_85_2080_region.tif")
-bio1.ip.2080 <- raster("./climproj/bio1_ip_85_2080_region.tif")
-bio1.mc.2080 <- raster("./climproj/bio1_mc_85_2080_region.tif")
-bio1.no.2080 <- raster("./climproj/bio1_no_85_2080_region.tif")
+bio1.ac.2080 <- raster("data/climproj/bio1_ac_85_2080_region.tif")
+bio1.cc.2080 <- raster("data/climproj/bio1_cc_85_2080_region.tif")
+bio1.gs.2080 <- raster("data/climproj/bio1_gs_85_2080_region.tif")
+bio1.he.2080 <- raster("data/climproj/bio1_he_85_2080_region.tif")
+bio1.ip.2080 <- raster("data/climproj/bio1_ip_85_2080_region.tif")
+bio1.mc.2080 <- raster("data/climproj/bio1_mc_85_2080_region.tif")
+bio1.no.2080 <- raster("data/climproj/bio1_no_85_2080_region.tif")
 Stack.bio1.2080 <- stack(c(bio1.ac.2080,bio1.cc.2080,bio1.gs.2080,bio1.he.2080,
                            bio1.ip.2080,bio1.mc.2080,bio1.no.2080))
 bio1.2080 <- mean(Stack.bio1.2080)
@@ -1043,8 +1100,8 @@ heat.col <- c(rev(heat.colors(255))[-c(1:10)])
 ColorRamp <- colorRampPalette(c(heat.col[length(heat.col)],"black"))
 Colors <- c(rev(heat.colors(255))[-c(1:10)],ColorRamp(50))
 ## Plot
-##pdf("./results/T_anomalies.pdf",width=6.5,height=10)
-png("./results/T_anomalies.png",width=100*6,height=100*10,res=100)
+##pdf("results/T_anomalies.pdf",width=6.5,height=10)
+png("results/T_anomalies.png",width=100*6,height=100*10,res=100)
 par(cex=1.2,mar=c(2,0,0,0))
 plot(bio1.anomalies,col=Colors,
      ##maxpixels=50000,
@@ -1072,8 +1129,8 @@ loss.defo <- TotACD.10*theta.prim
 loss.defo ## 258,372,713 ; 258 Tg (1 Tg= 10^12 g)
 
 ## Save workspace
-save.image(file="./results/Results.RData")
-##load("./results/Results.RData")
+save.image(file="results/Results.RData")
+##load("results/Results.RData")
 
 ##====================================================================================================
 ##============================================ END ===================================================
