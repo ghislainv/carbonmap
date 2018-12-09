@@ -19,11 +19,11 @@
 ##=====================
 
 ##= Libraries
-library(rgdal)
-library(sp)
-library(raster)
-library(rdryad)
-library(curl)
+list.of.packages = c("rgdal","sp","raster","rdryad","curl",
+                     "ggplot2","gam","randomForest")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages) > 0) {install.packages(new.packages)}
+lapply(list.of.packages, require, character.only=T)
 
 ##= Functions
 
@@ -164,8 +164,6 @@ dev.off()
 ##====================================================
 ## Mean annual temp. and annual precip. by forest type
 
-library(ggplot2)
-
 ## Cells without forest cover
 w.notfor10 <- which(is.na(values(forest)))
 ## Biomes raster
@@ -224,9 +222,6 @@ dev.off()
 ##
 ##=========================================================================
 
-library(ggplot2)
-library(gam)
-
 pdf("results/descriptive_plots.pdf")
 qplot(TEMP,ACDobs,data=df,geom=c("point","smooth"),method="lm",formula=y~ns(x,3))
 qplot(TSEAS,ACDobs,data=df,geom=c("point","smooth"),method="lm",formula=y~ns(x,3))
@@ -241,8 +236,6 @@ dev.off()
 ## Statistical model with randomForest
 ##
 ##=====================================
-
-library(randomForest)
 
 ##= Random Forests
 varnames <- c("ELEV","EVI","VCF","TEMP","TSEAS","PRECIP")
