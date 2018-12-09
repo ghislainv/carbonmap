@@ -116,7 +116,8 @@ for (i in c(1,6,7,8,9)) {
 ACD <- read.csv("data/ACD.csv",header=TRUE)
 ACD.plot <- SpatialPointsDataFrame(coords=cbind(ACD$LON,ACD$LAT),
                                    data=ACD,
-                                   proj4string=CRS("+init=epsg:4326"))
+                                   proj4string=CRS("+proj=longlat +datum=WGS84 +no_defs"))
+                                   #proj4string=CRS("+init=epsg:4326"))
 ## Plot ACD points
 if (!dir.exists("results")) {
   dir.create("results")
@@ -138,7 +139,8 @@ str(df)
 ## Ecoregion and plots
 
 ## Reproject ACD.plot
-ACD.38s <- spTransform(ACD.plot,CRS("+init=epsg:32738"))
+# ACD.38s <- spTransform(ACD.plot,CRS("+init=epsg:32738"))
+ACD.38s <- spTransform(ACD.plot,CRS("+proj=utm +zone=38 +south +datum=WGS84 +units=m +no_defs"))
 ## Forest raster
 Zvar <- stack("data/Zvar.tif")
 names(Zvar) <- c("forest","ecoregion","Saatchi250","Baccini250")
