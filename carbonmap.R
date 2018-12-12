@@ -1001,16 +1001,31 @@ ACD.2080.85.for10 <- raster("results/ACD.2080.85.for10.tif")
 
 # Percentage
 ACD.2050.pch <- 100*(ACD.2050.85.for10-ACD.for10)/ACD.for10
+ACD.2080.pch <- 100*(ACD.2080.85.for10-ACD.for10)/ACD.for10
 
 # Refuge area
+# 2050
 RA.2050 <- ACD.2050.pch
 RA.2050[values(ACD.2050.pch) > -15 | values(ACD.2050.pch) < 15] <- 1
 RA.2050[values(ACD.2050.pch) <= -15 | values(ACD.2050.pch) >= 15] <- 2
+# 2080
+RA.2080 <- ACD.2080.pch
+RA.2080[values(ACD.2080.pch) > -25 | values(ACD.2080.pch) < 25] <- 1
+RA.2080[values(ACD.2080.pch) <= -25 | values(ACD.2080.pch) >= 25] <- 2
 
 # Plot refuge areas
-png("results/Refuge_areas.png",height=300*7,width=300*7,res=300)
+# 2050
+png("results/Refuge_areas_2050.png",height=300*7,width=300*7,res=300)
 par(mar=c(0,0,0,0))
 plot(RA.2050,col=c("darkgreen","orange"),
+     axes=FALSE,box=FALSE,legend=FALSE,
+     main="")
+plot(Biomes.v,border=grey(0.3),col="transparent",add=TRUE)
+dev.off()
+# 2080
+png("results/Refuge_areas_2080.png",height=300*7,width=300*7,res=300)
+par(mar=c(0,0,0,0))
+plot(RA.2080,col=c("darkgreen","orange"),
      axes=FALSE,box=FALSE,legend=FALSE,
      main="")
 plot(Biomes.v,border=grey(0.3),col="transparent",add=TRUE)
