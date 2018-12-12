@@ -990,6 +990,34 @@ dev.off()
 
 ##============================================================================
 ##
+## Percentage of change
+##
+##============================================================================
+
+# Load ACD rasters
+ACD.for10 <- raster("results/ACD_for10.tif")
+ACD.2050.85.for10 <- raster("results/ACD.2050.85.for10.tif")
+ACD.2080.85.for10 <- raster("results/ACD.2080.85.for10.tif")
+
+# Percentage
+ACD.2050.pch <- 100*(ACD.2050.85.for10-ACD.for10)/ACD.for10
+
+# Refuge area
+RA.2050 <- ACD.2050.pch
+RA.2050[values(ACD.2050.pch) > -15 | values(ACD.2050.pch) < 15] <- 1
+RA.2050[values(ACD.2050.pch) <= -15 | values(ACD.2050.pch) >= 15] <- 2
+
+# Plot refuge areas
+png("results/Refuge_areas.png",height=300*7,width=300*7,res=300)
+par(mar=c(0,0,0,0))
+plot(RA.2050,col=c("darkgreen","orange"),
+     axes=FALSE,box=FALSE,legend=FALSE,
+     main="")
+plot(Biomes.v,border=grey(0.3),col="transparent",add=TRUE)
+dev.off()
+
+##============================================================================
+##
 ## Maps of predicted climatic anomalies
 ##
 ##============================================================================
@@ -1087,7 +1115,7 @@ bio1.anomalies <- bio1.region
 bio1.anomalies[] <- bio1.2080[]-bio1.region[]
 values(bio1.anomalies)[w.notfor10] <- NA
 range(bio1.anomalies[],na.rm=TRUE)
-## Legen
+## Legend
 a.arg <- list(at=seq(30,45,length.out=4), labels=c("+30","+35","+40","+45"))
 l.arg <- list(text="Temp. mean anomalies (°C x 10)",side=3, line=0.5, cex=1.4)
 ## Colors
